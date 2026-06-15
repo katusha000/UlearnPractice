@@ -70,7 +70,7 @@ classDiagram
         +int Amount
     }
     
-    %% Реализация интерфейсов (пунктирная с треугольником)
+    %% Реализация интерфейсов
     IOwnable <|.. Dwelling : implements
     IOwnable <|.. Mine : implements
     IFightable <|.. Mine : implements
@@ -80,7 +80,7 @@ classDiagram
     ICollectible <|.. Creeps : implements
     ICollectible <|.. ResourcePile : implements
     
-    %% Агрегация (классы хранят объекты в полях - пустой ромб)
+    %% Агрегация 
     Mine o-- Army : contains
     Mine o-- Treasure : contains
     Creeps o-- Army : contains
@@ -88,7 +88,7 @@ classDiagram
     Wolves o-- Army : contains
     ResourcePile o-- Treasure : contains
     
-    %% Зависимость (временное использование - пунктирная стрелка)
+    %% Зависимость 
     Player ..> Army : uses in CanBeat
     Player ..> Treasure : uses in Consume
     Interaction ..> Player : uses
