@@ -1,123 +1,103 @@
 # Практика: Robots
 
 ## 1. Описание предметной области и сущностей
-Система моделирует архитектуру роботов с разделением ответственности между AI (выработка команд) и Device (исполнение команд).
-Основные сущности: RobotAI - абстрактный класс для AI, вырабатывающего команды; Device - абстрактный класс для устройств, исполняющих команды. Конкретные реализации: ShooterAI и BuilderAI для разных типов роботов, Mover и ShooterMover для управления движением.
-Интерфейс IRobotAI ковариантен (только производит команды), IDevice контравариантен (только потребляет команды). Это позволяет использовать Mover (работающий с IMoveCommand) для робота с IShooterMoveCommand благодаря контравариации, и BuilderAI (возвращающий IMoveCommand) благодаря ковариации.
+Система моделирует взаимодействие между модулями принятия решений и исполнительными механизмами в автономных устройствах.
+Ключевые компоненты:
+
+    Планировщик (Planner) - компонент, отвечающий за формирование инструкций на основе текущего состояния.
+    Исполнитель (Executor) - модуль, реализующий полученные инструкции и возвращающий результат выполнения.
+    Инструкция (Instruction) - абстрактное представление действия, которое может быть выполнено.
+    Навигационная инструкция (NavigationInstruction) - команда перемещения с указанием конечной позиции.
+    Тактическая инструкция (TacticalInstruction) - расширенная навигационная команда с дополнительными параметрами поведения.
+    Стратегический планировщик и Инженерный планировщик - специализированные реализации логики принятия решений.
+    Мобильный исполнитель и Боевой исполнитель - конкретные механизмы выполнения команд.
+    Автономный агент - основной объект, объединяющий планировщик и исполнитель через обобщённый интерфейс.
+    Позиционный вектор - структура для хранения координат на плоскости.
+
+Система использует ковариантность в интерфейсе планировщика (out T) и контравариантность в интерфейсе исполнителя (in T), что позволяет гибко комбинировать компоненты с разными уровнями специализации инструкций.
 
 ## 2. Диаграмма классов (Mermaid)
 
 ```mermaid
 classDiagram
-    %% Интерфейсы с вариативностью
-    class IRobotAI {
+    direction LR
+
+    class IInstruction {
         <<interface>>
-        <<out TCommand>>
-        +TCommand GetCommand()
     }
-    
-    class IDevice {
+
+    class INavigationInstruction {
         <<interface>>
-        <<in TCommand>>
-        +string ExecuteCommand(TCommand command)
+        +PositionVector Destination
     }
-    
-    class IMoveCommand {
+
+    class ITacticalInstruction {
         <<interface>>
-        +Point Destination
+        +bool StealthActive
     }
-    
-    class IShooterMoveCommand {
+
+    class IPlanner~out T~ {
         <<interface>>
-        +Point Destination
-        +bool ShouldHide
+        +GenerateNextStep() T
     }
-    
-    %% Абстрактные generic классы
-    class RobotAI {
-        <<abstract>>
-        <<TCommand>>
-        +GetCommand()* TCommand
+
+    class IExecutor~in T~ {
+        <<interface>>
+        +Run(T instruction) string
     }
-    
-    class Device {
-        <<abstract>>
-        <<TCommand>>
-        +ExecuteCommand(TCommand)* string
+
+    class TacticalPlanner {
+        -int _stepCounter
+        +GenerateNextStep() CombatDirective
     }
-    
-    %% Конкретные реализации AI
-    class ShooterAI {
-        -int counter
-        +GetCommand() IShooterMoveCommand
+
+    class EngineeringPlanner {
+        -int _phaseIndex
+        +GenerateNextStep() BuildDirective
     }
-    
-    class BuilderAI {
-        -int counter
-        +GetCommand() IMoveCommand
+
+    class MobileExecutor {
+        +Run(INavigationInstruction move) string
     }
-    
-    %% Конкретные реализации Device
-    class Mover {
-        +ExecuteCommand(IMoveCommand) string
+
+    class CombatExecutor {
+        +Run(ITacticalInstruction engage) string
     }
-    
-    class ShooterMover {
-        +ExecuteCommand(IShooterMoveCommand) string
+
+    class AutonomousAgent~TInstruction~ {
+        -IPlanner~TInstruction~ _decisionMaker
+        -IExecutor~TInstruction~ _actionHandler
+        +AutonomousAgent(IPlanner~TInstruction~, IExecutor~TInstruction~)
+        +Operate(int cycles) IEnumerable~string~
     }
-    
-    %% Generic класс Robot
-    class Robot {
-        <<TCommand>>
-        -IRobotAI~TCommand~ _ai
-        -IDevice~TCommand~ _device
-        +Robot(IRobotAI, IDevice)
-        +Start(int) IEnumerable~string~
-        +static Create(IRobotAI, IDevice) Robot~TCommand~
+
+    class CombatDirective {
+        +PositionVector Destination
+        +bool StealthActive
+        +CreateFromPhase(int phase)$ CombatDirective
     }
-    
-    %% Классы команд
-    class Point {
-        +int X
-        +int Y
+
+    class BuildDirective {
+        +PositionVector Destination
+        +bool ActivateStructure
+        +CreateFromPhase(int phase)$ BuildDirective
     }
-    
-    class ShooterCommand {
-        +Point Destination
-        +bool ShouldHide
-        +static ForCounter(int) IShooterMoveCommand
+
+    class PositionVector {
+        +double X
+        +double Y
     }
-    
-    class BuilderCommand {
-        +Point Destination
-        +static ForCounter(int) IMoveCommand
-    }
-    
-    %% Реализация интерфейсов
-    IRobotAI <|.. RobotAI : implements
-    IDevice <|.. Device : implements
-    IMoveCommand <|-- IShooterMoveCommand : extends
-    IMoveCommand <|.. ShooterCommand : implements
-    IMoveCommand <|.. BuilderCommand : implements
-    IShooterMoveCommand <|.. ShooterCommand : implements
-    
-    %% Наследование
-    RobotAI <|-- ShooterAI : extends
-    RobotAI <|-- BuilderAI : extends
-    Device <|-- Mover : extends
-    Device <|-- ShooterMover : extends
-    
-    %% Агрегация
-    Robot o-- IRobotAI : uses ai
-    Robot o-- IDevice : uses device
-    
-    %% Композиция 
-    ShooterCommand *-- Point : destination
-    BuilderCommand *-- Point : destination
-    
-    %% Зависимости
-    ShooterAI ..> ShooterCommand : creates
-    BuilderAI ..> BuilderCommand : creates
-    ShooterMover ..> IShooterMoveCommand : uses
-    Mover ..> IMoveCommand : uses
+
+    IInstruction <|-- INavigationInstruction : базовая навигация
+    INavigationInstruction <|-- ITacticalInstruction : тактическое расширение
+    ITacticalInstruction <|.. CombatDirective : боевая директива
+    INavigationInstruction <|.. BuildDirective : строительная директива
+    IPlanner~CombatDirective~ <|.. TacticalPlanner : тактическое планирование
+    IPlanner~BuildDirective~ <|.. EngineeringPlanner : инженерное планирование
+    IExecutor~INavigationInstruction~ <|.. MobileExecutor : мобильное исполнение
+    IExecutor~ITacticalInstruction~ <|.. CombatExecutor : боевое исполнение
+    AutonomousAgent~TInstruction~ o-- IPlanner~TInstruction~ : использует планировщик
+    AutonomousAgent~TInstruction~ o-- IExecutor~TInstruction~ : делегирует исполнение
+    CombatDirective --> PositionVector : целевая позиция
+    BuildDirective --> PositionVector : целевая позиция
     ```
