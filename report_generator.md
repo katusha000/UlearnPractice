@@ -1,92 +1,127 @@
 # Практика: Report generator
 
 ## 1. Описание предметной области и сущностей
-Система предназначена для генерации отчётов о статистике погодных измерений (температуры и влажности) с использованием различных форматов вывода и методов вычисления показателей.
-Абстрактный класс ReportMaker реализует шаблонный метод MakeReport, определяющий общий алгоритм формирования отчёта, но делегирует конкретные детали форматирования (заголовки, списки, элементы) и вычисления статистики подклассам. Четыре конкретных класса-наследника (MeanAndStdHtmlReportMaker, MedianMarkdownReportMaker, MeanAndStdMarkdownReportMaker, MedianHtmlReportMaker) комбинируют два типа форматирования (HTML и Markdown) с двумя типами статистики (среднее со стандартным отклонением и медиана). Класс Measurement хранит данные измерений, MeanAndStd представляет результат вычисления среднего и отклонения, а ReportMakerHelper предоставляет удобные статические методы для создания отчётов без явного использования конкретных классов.
+Система формирует отчёты на основе коллекции погодных измерений (температура и влажность). Изначально в коде присутствовал комбинаторный взрыв классов: для каждой комбинации формата вывода и типа статистики создавался отдельный класс-наследник (MeanAndStdHtmlReportMaker, MedianMarkdownReportMaker и т.д.), что нарушало принцип единственной ответственности (SRP) и принцип открытости/закрытости (OCP).
+Рефакторинг заменил наследование на композицию стратегий (паттерн Strategy). Теперь ответственность разделена на две независимые оси изменений:
+
+    Форматирование отчёта — как выглядят заголовки, списки и элементы (HTML или Markdown).
+    Вычисление статистики — какой показатель рассчитывается по данным (среднее с отклонением или медиана).
+
+Ключевые компоненты:
+
+    IReportFormatter - интерфейс, описывающий операции форматирования: создание заголовка, открытие/закрытие списка, оформление элемента.
+    IStatisticsCalculator - интерфейс, отвечающий за вычисление статистического показателя по набору данных.
+    HtmlFormatter и MarkdownFormatter - конкретные реализации форматтера.
+    MeanAndStdCalculator и MedianCalculator - конкретные реализации калькулятора.
+    ReportMaker - центральный класс, принимающий через конструктор обе стратегии. Больше не является абстрактным и не требует наследования.
+    Measurement - структура данных измерения (температура, влажность).
+    IStatisticResult, MeanAndStd, Median - результаты вычислений.
+    ReportMakerHelper - фасад со статическими методами для удобного создания отчётов без явного конструирования стратегий.
 
 ## 2. Диаграмма классов (Mermaid)
 
 ```mermaid
 classDiagram
-    %% Абстрактный класс
-    class ReportMaker {
-        <<abstract>>
-        #string Caption*
-        #string MakeCaption(string caption)*
-        #string BeginList()*
-        #string EndList()*
-        #string MakeItem(string valueType, string entry)*
-        #object MakeStatistics(IEnumerable~double~ data)*
-        +string MakeReport(IEnumerable~Measurement~ measurements)
+    direction TB
+
+    %% Стратегии форматирования
+    class IReportFormatter {
+        <<interface>>
+        +MakeCaption(string text) string
+        +OpenList() string
+        +CloseList() string
+        +FormatEntry(string kind, string value) string
     }
-    
-    %% Конкретные реализации
-    class MeanAndStdHtmlReportMaker {
-        #string Caption
-        #string MakeCaption(string caption)
-        #string BeginList()
-        #string EndList()
-        #string MakeItem(string valueType, string entry)
-        #object MakeStatistics(IEnumerable~double~ data)
+
+    class HtmlFormatter {
+        +MakeCaption(string text) string
+        +OpenList() string
+        +CloseList() string
+        +FormatEntry(string kind, string value) string
     }
-    
-    class MedianMarkdownReportMaker {
-        #string Caption
-        #string MakeCaption(string caption)
-        #string BeginList()
-        #string EndList()
-        #string MakeItem(string valueType, string entry)
-        #object MakeStatistics(IEnumerable~double~ data)
+
+    class MarkdownFormatter {
+        +MakeCaption(string text) string
+        +OpenList() string
+        +CloseList() string
+        +FormatEntry(string kind, string value) string
     }
-    
-    class MeanAndStdMarkdownReportMaker {
-        #string Caption
-        #string MakeCaption(string caption)
-        #string BeginList()
-        #string EndList()
-        #string MakeItem(string valueType, string entry)
-        #object MakeStatistics(IEnumerable~double~ data)
+
+    %% Стратегии вычисления статистики
+    class IStatisticsCalculator {
+        <<interface>>
+        +Compute(IEnumerable~double~ values) IStatisticResult
     }
-    
-    class MedianHtmlReportMaker {
-        #string Caption
-        #string MakeCaption(string caption)
-        #string BeginList()
-        #string EndList()
-        #string MakeItem(string valueType, string entry)
-        #object MakeStatistics(IEnumerable~double~ data)
+
+    class MeanAndStdCalculator {
+        +Compute(IEnumerable~double~ values) IStatisticResult
     }
-    
-    %% Вспомогательные классы
-    class ReportMakerHelper {
-        +static string MeanAndStdHtmlReport(IEnumerable~Measurement~ data)
-        +static string MedianMarkdownReport(IEnumerable~Measurement~ data)
-        +static string MeanAndStdMarkdownReport(IEnumerable~Measurement~ data)
-        +static string MedianHtmlReport(IEnumerable~Measurement~ data)
+
+    class MedianCalculator {
+        +Compute(IEnumerable~double~ values) IStatisticResult
     }
-    
+
+    %% Результаты вычислений
+    class IStatisticResult {
+        <<interface>>
+        +ToString() string
+    }
+
+    class MeanAndStd {
+        +double Mean
+        +double StdDev
+        +ToString() string
+    }
+
+    class Median {
+        +double Value
+        +ToString() string
+    }
+
+    %% Данные и главный класс
     class Measurement {
         +double Temperature
         +double Humidity
     }
-    
-    class MeanAndStd {
-        +double Mean
-        +double Std
-        +string ToString()
+
+    class ReportMaker {
+        -IReportFormatter formatter
+        -IStatisticsCalculator calculator
+        +ReportMaker(IReportFormatter, IStatisticsCalculator)
+        +BuildReport(IEnumerable~Measurement~ data) string
     }
-    
-    %% Наследование 
-    ReportMaker <|-- MeanAndStdHtmlReportMaker : extends
-    ReportMaker <|-- MedianMarkdownReportMaker : extends
-    ReportMaker <|-- MeanAndStdMarkdownReportMaker : extends
-    ReportMaker <|-- MedianHtmlReportMaker : extends
-    
-    %% Зависимости
-    ReportMaker ..> Measurement : uses
-    ReportMaker ..> MeanAndStd : creates
-    ReportMakerHelper ..> ReportMaker : uses
-    ReportMakerHelper ..> Measurement : uses
-    MeanAndStdHtmlReportMaker ..> MeanAndStd : creates
-    MeanAndStdMarkdownReportMaker ..> MeanAndStd : creates
+
+    %% Фасад
+    class ReportMakerHelper {
+        +static string BuildMeanHtml(IEnumerable~Measurement~ data)
+        +static string BuildMeanMarkdown(IEnumerable~Measurement~ data)
+        +static string BuildMedianHtml(IEnumerable~Measurement~ data)
+        +static string BuildMedianMarkdown(IEnumerable~Measurement~ data)
+    }
+
+    %% Связи
+
+    %% Реализация интерфейсов
+    IReportFormatter <|.. HtmlFormatter : реализует HTML-вывод
+    IReportFormatter <|.. MarkdownFormatter : реализует Markdown-вывод
+    IStatisticsCalculator <|.. MeanAndStdCalculator : вычисляет среднее
+    IStatisticsCalculator <|.. MedianCalculator : вычисляет медиану
+    IStatisticResult <|.. MeanAndStd : результат среднего
+    IStatisticResult <|.. Median : результат медианы
+
+    %% Агрегация — стратегии передаются через конструктор
+    ReportMaker o-- IReportFormatter : использует форматтер
+    ReportMaker o-- IStatisticsCalculator : использует калькулятор
+
+    %% Зависимости — временное использование
+    ReportMaker ..> Measurement : обрабатывает данные
+    ReportMaker ..> IStatisticResult : получает результат
+    MeanAndStdCalculator ..> MeanAndStd : создаёт
+    MedianCalculator ..> Median : создаёт
+    ReportMakerHelper ..> ReportMaker : создаёт
+    ReportMakerHelper ..> HtmlFormatter : создаёт
+    ReportMakerHelper ..> MarkdownFormatter : создаёт
+    ReportMakerHelper ..> MeanAndStdCalculator : создаёт
+    ReportMakerHelper ..> MedianCalculator : создаёт
+    ReportMakerHelper ..> Measurement : принимает данные
     ```
