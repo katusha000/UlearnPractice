@@ -1,127 +1,140 @@
 # Практика: Report generator
 
 ## 1. Описание предметной области и сущностей
-Система формирует отчёты на основе коллекции погодных измерений (температура и влажность). Изначально в коде присутствовал комбинаторный взрыв классов: для каждой комбинации формата вывода и типа статистики создавался отдельный класс-наследник (MeanAndStdHtmlReportMaker, MedianMarkdownReportMaker и т.д.), что нарушало принцип единственной ответственности (SRP) и принцип открытости/закрытости (OCP).
-Рефакторинг заменил наследование на композицию стратегий (паттерн Strategy). Теперь ответственность разделена на две независимые оси изменений:
+Система решает задачу формирования аналитических сводок по метеорологическим наблюдениям (температура, влажность). Исходная реализация страдала от комбинаторного взрыва наследников: каждый подкласс ReportMaker одновременно кодировал и способ визуального представления, и математический метод анализа, что приводило к дублированию логики и нарушению принципа единственной ответственности.
+Рефакторинг применяет паттерн Strategy, разделяя две ортогональные оси изменчивости:
 
-    Форматирование отчёта — как выглядят заголовки, списки и элементы (HTML или Markdown).
-    Вычисление статистики — какой показатель рассчитывается по данным (среднее с отклонением или медиана).
+    Представление (Presentation) - отвечает за синтаксис выходного документа (разметка заголовков, списков, элементов).
+    Аналитика (Analytics) - отвечает за математическую обработку числовой выборки.
 
-Ключевые компоненты:
+Компоненты системы:
 
-    IReportFormatter - интерфейс, описывающий операции форматирования: создание заголовка, открытие/закрытие списка, оформление элемента.
-    IStatisticsCalculator - интерфейс, отвечающий за вычисление статистического показателя по набору данных.
-    HtmlFormatter и MarkdownFormatter - конкретные реализации форматтера.
-    MeanAndStdCalculator и MedianCalculator - конкретные реализации калькулятора.
-    ReportMaker - центральный класс, принимающий через конструктор обе стратегии. Больше не является абстрактным и не требует наследования.
-    Measurement - структура данных измерения (температура, влажность).
-    IStatisticResult, MeanAndStd, Median - результаты вычислений.
-    ReportMakerHelper - фасад со статическими методами для удобного создания отчётов без явного конструирования стратегий.
+    IOutputRenderer - контракт для модулей визуального оформления. Определяет операции рендеринга заголовка, секции списка и отдельной строки.
+    IMetricAnalyzer - контракт для модулей статистического анализа. Принимает числовую выборку и возвращает структурированный результат.
+    WebRenderer и TextRenderer - конкретные реализации рендерера для HTML и Markdown соответственно.
+    AverageDeviationAnalyzer и MedianAnalyzer - конкретные реализации аналитических модулей.
+    ReportComposer - центральный класс-композитор, собирающий итоговый документ из двух стратегий, переданных через конструктор.
+    WeatherRecord - структура исходных данных (температура, влажность).
+    IAnalysisResult, AverageWithDeviation, MedianValue - иерархия результатов анализа.
+    QuickReport - фасад, упрощающий клиентский код за счёт скрытия конструирования стратегий.
 
 ## 2. Диаграмма классов (Mermaid)
 
 ```mermaid
 classDiagram
-    direction TB
+    direction LR
 
-    %% Стратегии форматирования
-    class IReportFormatter {
-        <<interface>>
-        +MakeCaption(string text) string
-        +OpenList() string
-        +CloseList() string
-        +FormatEntry(string kind, string value) string
-    }
+    %% Слой представления
+    subgraph Presentation["Слой представления"]
+        class IOutputRenderer {
+            <<interface>>
+            +RenderHeader(string title) string
+            +OpenSection() string
+            +AddRow(string label, string value) string
+            +CloseSection() string
+        }
 
-    class HtmlFormatter {
-        +MakeCaption(string text) string
-        +OpenList() string
-        +CloseList() string
-        +FormatEntry(string kind, string value) string
-    }
+        class WebRenderer {
+            +RenderHeader(string title) string
+            +OpenSection() string
+            +AddRow(string label, string value) string
+            +CloseSection() string
+        }
 
-    class MarkdownFormatter {
-        +MakeCaption(string text) string
-        +OpenList() string
-        +CloseList() string
-        +FormatEntry(string kind, string value) string
-    }
+        class TextRenderer {
+            +RenderHeader(string title) string
+            +OpenSection() string
+            +AddRow(string label, string value) string
+            +CloseSection() string
+        }
+    end
 
-    %% Стратегии вычисления статистики
-    class IStatisticsCalculator {
-        <<interface>>
-        +Compute(IEnumerable~double~ values) IStatisticResult
-    }
+    %% Слой аналитики
+    subgraph Analytics["Слой аналитики"]
+        class IMetricAnalyzer {
+            <<interface>>
+            +Analyze(IEnumerable~double~ sample) IAnalysisResult
+        }
 
-    class MeanAndStdCalculator {
-        +Compute(IEnumerable~double~ values) IStatisticResult
-    }
+        class AverageDeviationAnalyzer {
+            +Analyze(IEnumerable~double~ sample) IAnalysisResult
+        }
 
-    class MedianCalculator {
-        +Compute(IEnumerable~double~ values) IStatisticResult
-    }
+        class MedianAnalyzer {
+            +Analyze(IEnumerable~double~ sample) IAnalysisResult
+        }
+    end
 
-    %% Результаты вычислений
-    class IStatisticResult {
-        <<interface>>
-        +ToString() string
-    }
+    %% Результаты анализа
+    subgraph Results["Результаты"]
+        class IAnalysisResult {
+            <<interface>>
+            +string AsText()
+        }
 
-    class MeanAndStd {
-        +double Mean
-        +double StdDev
-        +ToString() string
-    }
+        class AverageWithDeviation {
+            +double Average
+            +double Deviation
+            +string AsText()
+        }
 
-    class Median {
-        +double Value
-        +ToString() string
-    }
+        class MedianValue {
+            +double Value
+            +string AsText()
+        }
+    end
 
-    %% Данные и главный класс
-    class Measurement {
+    %% Данные
+    class WeatherRecord {
         +double Temperature
         +double Humidity
     }
 
-    class ReportMaker {
-        -IReportFormatter formatter
-        -IStatisticsCalculator calculator
-        +ReportMaker(IReportFormatter, IStatisticsCalculator)
-        +BuildReport(IEnumerable~Measurement~ data) string
+    class ReportComposer {
+        -IOutputRenderer renderer
+        -IMetricAnalyzer analyzer
+        +ReportComposer(IOutputRenderer, IMetricAnalyzer)
+        +Compose(IEnumerable~WeatherRecord~ records) string
     }
 
-    %% Фасад
-    class ReportMakerHelper {
-        +static string BuildMeanHtml(IEnumerable~Measurement~ data)
-        +static string BuildMeanMarkdown(IEnumerable~Measurement~ data)
-        +static string BuildMedianHtml(IEnumerable~Measurement~ data)
-        +static string BuildMedianMarkdown(IEnumerable~Measurement~ data)
+    class QuickReport {
+        +static string GenerateAverageWeb(IEnumerable~WeatherRecord~ records)
+        +static string GenerateAverageText(IEnumerable~WeatherRecord~ records)
+        +static string GenerateMedianWeb(IEnumerable~WeatherRecord~ records)
+        +static string GenerateMedianText(IEnumerable~WeatherRecord~ records)
     }
 
     %% Связи
 
-    %% Реализация интерфейсов
-    IReportFormatter <|.. HtmlFormatter : реализует HTML-вывод
-    IReportFormatter <|.. MarkdownFormatter : реализует Markdown-вывод
-    IStatisticsCalculator <|.. MeanAndStdCalculator : вычисляет среднее
-    IStatisticsCalculator <|.. MedianCalculator : вычисляет медиану
-    IStatisticResult <|.. MeanAndStd : результат среднего
-    IStatisticResult <|.. Median : результат медианы
+    %% Реализация интерфейсов представления
+    IOutputRenderer <|.. WebRenderer
+    IOutputRenderer <|.. TextRenderer
 
-    %% Агрегация — стратегии передаются через конструктор
-    ReportMaker o-- IReportFormatter : использует форматтер
-    ReportMaker o-- IStatisticsCalculator : использует калькулятор
+    %% Реализация интерфейсов аналитики
+    IMetricAnalyzer <|.. AverageDeviationAnalyzer
+    IMetricAnalyzer <|.. MedianAnalyzer
 
-    %% Зависимости — временное использование
-    ReportMaker ..> Measurement : обрабатывает данные
-    ReportMaker ..> IStatisticResult : получает результат
-    MeanAndStdCalculator ..> MeanAndStd : создаёт
-    MedianCalculator ..> Median : создаёт
-    ReportMakerHelper ..> ReportMaker : создаёт
-    ReportMakerHelper ..> HtmlFormatter : создаёт
-    ReportMakerHelper ..> MarkdownFormatter : создаёт
-    ReportMakerHelper ..> MeanAndStdCalculator : создаёт
-    ReportMakerHelper ..> MedianCalculator : создаёт
-    ReportMakerHelper ..> Measurement : принимает данные
+    %% Реализация результатов
+    IAnalysisResult <|.. AverageWithDeviation
+    IAnalysisResult <|.. MedianValue
+
+    %% Агрегация стратегий в композиторе
+    ReportComposer o-- IOutputRenderer : стратегия представления
+    ReportComposer o-- IMetricAnalyzer : стратегия анализа
+
+    %% Зависимости композитора
+    ReportComposer ..> WeatherRecord : обрабатывает записи
+    ReportComposer ..> IAnalysisResult : использует результат
+
+    %% Создание результатов аналитикой
+    AverageDeviationAnalyzer ..> AverageWithDeviation : формирует
+    MedianAnalyzer ..> MedianValue : формирует
+
+    %% Фасад создаёт компоненты
+    QuickReport ..> ReportComposer : собирает
+    QuickReport ..> WebRenderer : инициализирует
+    QuickReport ..> TextRenderer : инициализирует
+    QuickReport ..> AverageDeviationAnalyzer : инициализирует
+    QuickReport ..> MedianAnalyzer : инициализирует
+    QuickReport ..> WeatherRecord : принимает данные
     ```

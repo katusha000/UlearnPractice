@@ -1,49 +1,83 @@
 # Практика: Сбои
 
 ## 1. Описание предметной области и сущностей
-Система предназначена для анализа сбоев в работе устройств и формирования отчетов о критических отказах. 
-Основная сущность Device представляет устройство с уникальным идентификатором и именем. Сущность Failure описывает факт сбоя: содержит тип отказа (FailureType), дату возникновения и ссылку на устройство. Типы сбоев варьируются от неожиданных отключений до аппаратных неисправностей.
-Класс ReportMaker отвечает за формирование списка устройств, в которых произошли критические сбои (типы 0 и 2 — четные значения) до указанной даты. Для этого он анализирует коллекцию сбоев, проверяя их серьезность и дату возникновения, затем сопоставляет их с устройствами и возвращает имена проблемных устройств. Вспомогательный класс Common содержит устаревшие методы для обратной совместимости.
+Система реализует анализ исторических данных об отказах технического оборудования с целью выявления устройств, подверженных критическим сбоям в заданный период времени.
+Архитектурные слои:
+Доменный слой (Domain Layer):
+
+    Device - агрегатный корень, представляющий единицу оборудования с уникальным идентификатором и наименованием.
+    Failure - сущность события отказа, инкапсулирующая тип неисправности, временную метку и ссылку на устройство. Содержит методы бизнес-логики для оценки серьезности (IsFailureSerious) и временного сравнения (IsEarlierThan).
+    FailureType - типизированное перечисление классификации отказов (аппаратурные, программные, сетевые).
+
+Сервисный слой (Service Layer):
+
+    ReportMaker - сервисный класс, реализующий use-case "Формирование отчета о проблемных устройствах". Анализирует коллекцию сбоев, применяет критерии фильтрации (тип, дата) и возвращает имена устройств.
+
+Слой совместимости (Legacy Layer):
+
+    Common - утилитарный класс, сохраняющий устаревшие методы для обратной совместимости со старым API. Используется методом FindDevicesFailedBeforeDateObsolete.
 
 ## 2. Диаграмма классов (Mermaid)
 
 ```mermaid
 classDiagram
-    class Device {
-        +int DeviceId
-        +string Name
-    }
+    direction TB
     
-    class Failure {
-        +FailureType Type
-        +int Day
-        +int Month
-        +int Year
-        +int DeviceId
-        +bool IsFailureSerious()
-        +bool IsEarlierThan(DateTime date)
-    }
+    %% Доменный слой
+    subgraph Domain["Доменный слой"]
+        class Device {
+            <<entity>>
+            +int DeviceId
+            +string Name
+            +Device(int id, string name)
+        }
+        
+        class Failure {
+            <<entity>>
+            +FailureType Type
+            +int Day
+            +int Month
+            +int Year
+            +int DeviceId
+            +IsFailureSerious() bool
+            +IsEarlierThan(DateTime date) bool
+        }
+        
+        class FailureType {
+            <<enumeration>>
+            UnexpectedShutdown = 0
+            ShortNonResponding = 1
+            HardwareFailures = 2
+            ConnectionProblems = 3
+        }
+    end
     
-    class FailureType {
-        <<enumeration>>
-        UnexpectedShutdown = 0
-        ShortNonResponding = 1
-        HardwareFailures = 2
-        ConnectionProblems = 3
-    }
+    %% Сервисный слой
+    subgraph Service["Сервисный слой"]
+        class ReportMaker {
+            <<service>>
+            +FindDevicesFailedBeforeDate(devices: List~Device~, failures: List~Failure~, beforeDate: DateTime) List~string~$
+            +FindDevicesFailedBeforeDateObsolete(day: int, month: int, year: int, failureTypes: int[], deviceId: int[], times: object[][], devices: List~Dictionary~string, object~~) List~string~$
+        }
+    end
     
-    class ReportMaker {
-        +static List~string~ FindDevicesFailedBeforeDate(List~Device~ devices, List~Failure~ failures, DateTime beforeDate)
-        +static List~string~ FindDevicesFailedBeforeDateObsolete(int day, int month, int year, int[] failureTypes, int[] deviceId, object[][] times, List~Dictionary~string, object~~ devices)
-    }
+    %% Слой совместимости
+    subgraph Legacy["Устаревший API"]
+        class Common {
+            <<helper>>
+            +IsFailureSerious(failureType: int) int$
+            +Earlier(v: object[], day: int, month: int, year: int) int$
+        }
+    end
     
-    class Common {
-        +static int IsFailureSerious(int failureType)
-        +static int Earlier(object[] v, int day, int month, int year)
-    }
+    %% Связи
     
-    Failure ..> FailureType : type
-    ReportMaker ..> Device : uses
-    ReportMaker ..> Failure : uses
-    ReportMaker ..> Common : uses
+    %% Доменные связи
+    Failure --> FailureType : классифицирует тип отказа
+    Failure --> Device : ссылается на устройство через DeviceId
+    
+    %% Сервисные связи
+    ReportMaker ..> Failure : анализирует коллекцию сбоев
+    ReportMaker ..> Device : извлекает имена проблемных устройств
+    ReportMaker ..> Common : делегирует устаревшую логику
     ```
