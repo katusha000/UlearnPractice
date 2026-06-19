@@ -1,103 +1,116 @@
 # Практика: Robots
 
 ## 1. Описание предметной области и сущностей
-Система моделирует взаимодействие между модулями принятия решений и исполнительными механизмами в автономных устройствах.
-Ключевые компоненты:
-
-    Планировщик (Planner) - компонент, отвечающий за формирование инструкций на основе текущего состояния.
-    Исполнитель (Executor) - модуль, реализующий полученные инструкции и возвращающий результат выполнения.
-    Инструкция (Instruction) - абстрактное представление действия, которое может быть выполнено.
-    Навигационная инструкция (NavigationInstruction) - команда перемещения с указанием конечной позиции.
-    Тактическая инструкция (TacticalInstruction) - расширенная навигационная команда с дополнительными параметрами поведения.
-    Стратегический планировщик и Инженерный планировщик - специализированные реализации логики принятия решений.
-    Мобильный исполнитель и Боевой исполнитель - конкретные механизмы выполнения команд.
-    Автономный агент - основной объект, объединяющий планировщик и исполнитель через обобщённый интерфейс.
-    Позиционный вектор - структура для хранения координат на плоскости.
-
-Система использует ковариантность в интерфейсе планировщика (out T) и контравариантность в интерфейсе исполнителя (in T), что позволяет гибко комбинировать компоненты с разными уровнями специализации инструкций.
+Система моделирует работу автоматизированного склада, где задачи генерируются координирующим модулем и выполняются физическими механизмами. Архитектура построена на принципе разделения генерации задач и их исполнения, что позволяет независимо развивать логику планирования и аппаратную часть.
+Ключевые абстракции:
+Базовый контракт IOperation описывает любое действие, которое может быть выполнено на складе. От него наследуется ITransferOperation - специализированный контракт для операций перемещения грузов между зонами хранения, содержащий целевую локацию. Далее расширяется до IPriorityOperation - операции с повышенным приоритетом, где добавляется флаг срочности выполнения.
+Интерфейс ICoordinator с ковариантным параметром типа отвечает за генерацию последовательности операций. Ковариантность позволяет использовать координатор, производящий базовые операции перемещения, в контексте, ожидающем операции с приоритетом. Интерфейс IMechanism с контравариантным параметром описывает исполнительный механизм, способный обрабатывать операции определённого типа. Контравариантность даёт возможность механизму, работающему с базовыми операциями перемещения, принимать и операции с приоритетом.
+Реализации:
+WarehouseCoordinator и InventoryCoordinator - два типа координаторов для разных режимов работы склада (основное хранение и инвентаризация). ConveyorMechanism и RoboticArm - исполнительные устройства (конвейерная лента и роботизированная рука).
+AutomatedUnit - универсальный модуль, объединяющий координатор и механизм через обобщённый интерфейс. TransferOperation и ProcessingOperation - конкретные классы операций с параметрами. Location - структура, описывающая позицию на складе (стеллаж, уровень).
 
 ## 2. Диаграмма классов (Mermaid)
 
 ```mermaid
 classDiagram
-    direction LR
+    direction TB
 
-    class IInstruction {
+    %% Базовые интерфейсы операций
+    class IOperation {
         <<interface>>
     }
 
-    class INavigationInstruction {
+    class ITransferOperation {
         <<interface>>
-        +PositionVector Destination
+        +Location TargetLocation
     }
 
-    class ITacticalInstruction {
+    class IPriorityOperation {
         <<interface>>
-        +bool StealthActive
+        +bool IsUrgent
     }
 
-    class IPlanner~out T~ {
+    %% Интерфейсы с вариативностью
+    class ICoordinator~out T~ {
         <<interface>>
-        +GenerateNextStep() T
+        +GenerateNextOperation() T
     }
 
-    class IExecutor~in T~ {
+    class IMechanism~in T~ {
         <<interface>>
-        +Run(T instruction) string
+        +Execute(T operation) string
     }
 
-    class TacticalPlanner {
-        -int _stepCounter
-        +GenerateNextStep() CombatDirective
+    %% Конкретные координаторы
+    class WarehouseCoordinator {
+        -int _sequenceIndex
+        +GenerateNextOperation() TransferOperation
     }
 
-    class EngineeringPlanner {
-        -int _phaseIndex
-        +GenerateNextStep() BuildDirective
+    class InventoryCoordinator {
+        -int _phaseNumber
+        +GenerateNextOperation() ProcessingOperation
     }
 
-    class MobileExecutor {
-        +Run(INavigationInstruction move) string
+    %% Конкретные механизмы
+    class ConveyorMechanism {
+        +Execute(ITransferOperation transfer) string
     }
 
-    class CombatExecutor {
-        +Run(ITacticalInstruction engage) string
+    class RoboticArm {
+        +Execute(IPriorityOperation priority) string
     }
 
-    class AutonomousAgent~TInstruction~ {
-        -IPlanner~TInstruction~ _decisionMaker
-        -IExecutor~TInstruction~ _actionHandler
-        +AutonomousAgent(IPlanner~TInstruction~, IExecutor~TInstruction~)
-        +Operate(int cycles) IEnumerable~string~
+    %% Универсальный модуль
+    class AutomatedUnit~TOperation~ {
+        -ICoordinator~TOperation~ coordinator
+        -IMechanism~TOperation~ mechanism
+        +AutomatedUnit(ICoordinator~TOperation~, IMechanism~TOperation~)
+        +Run(int cycles) IEnumerable~string~
     }
 
-    class CombatDirective {
-        +PositionVector Destination
-        +bool StealthActive
-        +CreateFromPhase(int phase)$ CombatDirective
+    %% Классы данных операций
+    class TransferOperation {
+        +Location TargetLocation
+        +bool IsUrgent
+        +CreateForPhase(int phase)$ TransferOperation
     }
 
-    class BuildDirective {
-        +PositionVector Destination
-        +bool ActivateStructure
-        +CreateFromPhase(int phase)$ BuildDirective
+    class ProcessingOperation {
+        +Location TargetLocation
+        +bool RequiresVerification
+        +CreateForPhase(int phase)$ ProcessingOperation
     }
 
-    class PositionVector {
-        +double X
-        +double Y
+    %% Структура локации
+    class Location {
+        +int RackNumber
+        +int ShelfLevel
     }
 
-    IInstruction <|-- INavigationInstruction : базовая навигация
-    INavigationInstruction <|-- ITacticalInstruction : тактическое расширение
-    ITacticalInstruction <|.. CombatDirective : боевая директива
-    INavigationInstruction <|.. BuildDirective : строительная директива
-    IPlanner~CombatDirective~ <|.. TacticalPlanner : тактическое планирование
-    IPlanner~BuildDirective~ <|.. EngineeringPlanner : инженерное планирование
-    IExecutor~INavigationInstruction~ <|.. MobileExecutor : мобильное исполнение
-    IExecutor~ITacticalInstruction~ <|.. CombatExecutor : боевое исполнение
-    AutonomousAgent~TInstruction~ o-- IPlanner~TInstruction~ : использует планировщик
-    AutonomousAgent~TInstruction~ o-- IExecutor~TInstruction~ : делегирует исполнение
-    CombatDirective --> PositionVector : целевая позиция
-    BuildDirective --> PositionVector : целевая позиция
+    %% Связи
+
+    %% Наследование интерфейсов
+    IOperation <|-- ITransferOperation
+    ITransferOperation <|-- IPriorityOperation
+
+    %% Реализация интерфейсов координаторами
+    ICoordinator~TransferOperation~ <|.. WarehouseCoordinator
+    ICoordinator~ProcessingOperation~ <|.. InventoryCoordinator
+
+    %% Реализация интерфейсов механизмами
+    IMechanism~ITransferOperation~ <|.. ConveyorMechanism
+    IMechanism~IPriorityOperation~ <|.. RoboticArm
+
+    %% Реализация операций
+    IPriorityOperation <|.. TransferOperation
+    ITransferOperation <|.. ProcessingOperation
+
+    %% Ассоциация компонентов модуля
+    AutomatedUnit~TOperation~ --> ICoordinator~TOperation~ : координатор
+    AutomatedUnit~TOperation~ --> IMechanism~TOperation~ : механизм
+
+    %% Связи операций с локацией
+    TransferOperation --> Location : целевая позиция
+    ProcessingOperation --> Location : целевая позиция
     ```
