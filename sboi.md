@@ -23,51 +23,60 @@
 classDiagram
     direction TB
     
-    %% Доменный слой
-    subgraph Domain["Доменный слой"]
-        class Device {
-            <<entity>>
-            +int DeviceId
-            +string Name
-            +Device(int id, string name)
-        }
-        
-        class Failure {
-            <<entity>>
-            +FailureType Type
-            +int Day
-            +int Month
-            +int Year
-            +int DeviceId
-            +IsFailureSerious() bool
-            +IsEarlierThan(DateTime date) bool
-        }
-        
-        class FailureType {
-            <<enumeration>>
-            UnexpectedShutdown = 0
-            ShortNonResponding = 1
-            HardwareFailures = 2
-            ConnectionProblems = 3
-        }
+    %% Доменный слой 
+    class Device {
+        <<entity>>
+        +int DeviceId
+        +string Name
+        +Device(int id, string name)
+    }
+    
+    class Failure {
+        <<entity>>
+        +FailureType Type
+        +int Day
+        +int Month
+        +int Year
+        +int DeviceId
+        +IsFailureSerious() bool
+        +IsEarlierThan(DateTime date) bool
+    }
+    
+    class FailureType {
+        <<enumeration>>
+        UnexpectedShutdown = 0
+        ShortNonResponding = 1
+        HardwareFailures = 2
+        ConnectionProblems = 3
+    }
+    
+    %% Сервисный слой 
+    class ReportMaker {
+        <<service>>
+        +FindDevicesFailedBeforeDate(devices: List~Device~, failures: List~Failure~, beforeDate: DateTime) List~string~$
+        +FindDevicesFailedBeforeDateObsolete(day: int, month: int, year: int, failureTypes: int[], deviceId: int[], times: object[][], devices: List~Dictionary~string, object~~) List~string~$
+    }
+    
+    %% Слой совместимости 
+    class Common {
+        <<helper>>
+        +IsFailureSerious(failureType: int) int$
+        +Earlier(v: object[], day: int, month: int, year: int) int$
+    }
+    
+    %% Группировка по слоям 
+    subgraph Domain
+        Device
+        Failure
+        FailureType
     end
     
-    %% Сервисный слой
-    subgraph Service["Сервисный слой"]
-        class ReportMaker {
-            <<service>>
-            +FindDevicesFailedBeforeDate(devices: List~Device~, failures: List~Failure~, beforeDate: DateTime) List~string~$
-            +FindDevicesFailedBeforeDateObsolete(day: int, month: int, year: int, failureTypes: int[], deviceId: int[], times: object[][], devices: List~Dictionary~string, object~~) List~string~$
-        }
+    subgraph Service
+        ReportMaker
     end
     
-    %% Слой совместимости
-    subgraph Legacy["Устаревший API"]
-        class Common {
-            <<helper>>
-            +IsFailureSerious(failureType: int) int$
-            +Earlier(v: object[], day: int, month: int, year: int) int$
-        }
+    subgraph Legacy
+        Common
     end
     
     %% Связи

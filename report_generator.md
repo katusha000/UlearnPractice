@@ -24,67 +24,61 @@
 classDiagram
     direction LR
 
-    %% Слой представления
-    subgraph Presentation["Слой представления"]
-        class IOutputRenderer {
-            <<interface>>
-            +RenderHeader(string title) string
-            +OpenSection() string
-            +AddRow(string label, string value) string
-            +CloseSection() string
-        }
+    %% Классы слоя представления
+    class IOutputRenderer {
+        <<interface>>
+        +RenderHeader(string title) string
+        +OpenSection() string
+        +AddRow(string label, string value) string
+        +CloseSection() string
+    }
 
-        class WebRenderer {
-            +RenderHeader(string title) string
-            +OpenSection() string
-            +AddRow(string label, string value) string
-            +CloseSection() string
-        }
+    class WebRenderer {
+        +RenderHeader(string title) string
+        +OpenSection() string
+        +AddRow(string label, string value) string
+        +CloseSection() string
+    }
 
-        class TextRenderer {
-            +RenderHeader(string title) string
-            +OpenSection() string
-            +AddRow(string label, string value) string
-            +CloseSection() string
-        }
-    end
+    class TextRenderer {
+        +RenderHeader(string title) string
+        +OpenSection() string
+        +AddRow(string label, string value) string
+        +CloseSection() string
+    }
 
-    %% Слой аналитики
-    subgraph Analytics["Слой аналитики"]
-        class IMetricAnalyzer {
-            <<interface>>
-            +Analyze(IEnumerable~double~ sample) IAnalysisResult
-        }
+    %% Классы слоя аналитики
+    class IMetricAnalyzer {
+        <<interface>>
+        +Analyze(IEnumerable~double~ sample) IAnalysisResult
+    }
 
-        class AverageDeviationAnalyzer {
-            +Analyze(IEnumerable~double~ sample) IAnalysisResult
-        }
+    class AverageDeviationAnalyzer {
+        +Analyze(IEnumerable~double~ sample) IAnalysisResult
+    }
 
-        class MedianAnalyzer {
-            +Analyze(IEnumerable~double~ sample) IAnalysisResult
-        }
-    end
+    class MedianAnalyzer {
+        +Analyze(IEnumerable~double~ sample) IAnalysisResult
+    }
 
     %% Результаты анализа
-    subgraph Results["Результаты"]
-        class IAnalysisResult {
-            <<interface>>
-            +string AsText()
-        }
+    class IAnalysisResult {
+        <<interface>>
+        +string AsText()
+    }
 
-        class AverageWithDeviation {
-            +double Average
-            +double Deviation
-            +string AsText()
-        }
+    class AverageWithDeviation {
+        +double Average
+        +double Deviation
+        +string AsText()
+    }
 
-        class MedianValue {
-            +double Value
-            +string AsText()
-        }
-    end
+    class MedianValue {
+        +double Value
+        +string AsText()
+    }
 
-    %% Данные
+    %% Данные и композитор
     class WeatherRecord {
         +double Temperature
         +double Humidity
@@ -104,33 +98,42 @@ classDiagram
         +static string GenerateMedianText(IEnumerable~WeatherRecord~ records)
     }
 
-    %% Связи
+    %% Группировка по слоям (без кавычек и кириллицы)
+    subgraph Presentation
+        IOutputRenderer
+        WebRenderer
+        TextRenderer
+    end
 
-    %% Реализация интерфейсов представления
+    subgraph Analytics
+        IMetricAnalyzer
+        AverageDeviationAnalyzer
+        MedianAnalyzer
+    end
+
+    subgraph Results
+        IAnalysisResult
+        AverageWithDeviation
+        MedianValue
+    end
+
+    %% Связи
     IOutputRenderer <|.. WebRenderer
     IOutputRenderer <|.. TextRenderer
-
-    %% Реализация интерфейсов аналитики
     IMetricAnalyzer <|.. AverageDeviationAnalyzer
     IMetricAnalyzer <|.. MedianAnalyzer
-
-    %% Реализация результатов
     IAnalysisResult <|.. AverageWithDeviation
     IAnalysisResult <|.. MedianValue
 
-    %% Агрегация стратегий в композиторе
     ReportComposer o-- IOutputRenderer : стратегия представления
     ReportComposer o-- IMetricAnalyzer : стратегия анализа
 
-    %% Зависимости композитора
     ReportComposer ..> WeatherRecord : обрабатывает записи
     ReportComposer ..> IAnalysisResult : использует результат
 
-    %% Создание результатов аналитикой
     AverageDeviationAnalyzer ..> AverageWithDeviation : формирует
     MedianAnalyzer ..> MedianValue : формирует
 
-    %% Фасад создаёт компоненты
     QuickReport ..> ReportComposer : собирает
     QuickReport ..> WebRenderer : инициализирует
     QuickReport ..> TextRenderer : инициализирует
